@@ -1,0 +1,7 @@
+using Microsoft.AspNetCore.Mvc;using Microsoft.EntityFrameworkCore;using TajaFarm.Api.Data;using TajaFarm.Api.Models;
+namespace TajaFarm.Api.Controllers;[ApiController][Route("api/reviews")]
+public class ReviewsController:BaseController{
+ [HttpPost]public async Task<IActionResult> Add(ReviewRequest req,[FromServices]AppDbContext db){var r=RequireRole("customer",out var t);if(r is not null)return r;var p=await db.Products.FindAsync(req.ProductId);if(p is null)return NotFound();var delivered=await db.Orders.Include(x=>x.Items).AnyAsync(x=>x.CustomerId==t!.Id&&x.Items.Any(i=>i.ProductId==req.ProductId)&&x.FarmerConfirmed&&x.ManualStage=="delivered");if(!delivered)return StatusCode(403,new{error="You can review after delivery"});var u=await db.Users.FindAsync(t.Id);var review=new Review{ProductId=p.Id,ProductName=p.Name,FarmerId=p.FarmerId,CustomerId=t.Id,CustomerName=u!.Name,ProductRating=Math.Clamp(req.ProductRating,1,5),FarmerRating=Math.Clamp(req.FarmerRating,1,5),Comment=req.Comment};db.Reviews.Add(review);await db.SaveChangesAsync();return StatusCode(201,review);}
+ [HttpGet("product/{id:int}")]public async Task<IActionResult> Product(int id,[FromServices]AppDbContext db)=>Ok(await db.Reviews.Where(x=>x.ProductId==id).OrderByDescending(x=>x.CreatedAt).ToListAsync());
+ [HttpGet("farmer/{id:int}")]public async Task<IActionResult> Farmer(int id,[FromServices]AppDbContext db)=>Ok(await db.Reviews.Where(x=>x.FarmerId==id).OrderByDescending(x=>x.CreatedAt).ToListAsync());
+}
